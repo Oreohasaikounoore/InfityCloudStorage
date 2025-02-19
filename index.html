@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>InfCloud</title>
+  <style>
+    /* すべてのコンテンツを中央揃え */
+    body { text-align: center; margin: 0; padding: 0; font-family: Arial, sans-serif; }
+    .container { margin: auto; width: 80%; }
+    /* ファイルアップロード欄（ドラッグ＆ドロップまたはクリックでファイル参照） */
+    #uploadArea {
+      border: 2px dashed #ccc;
+      padding: 20px;
+      margin: 20px;
+      cursor: pointer;
+    }
+    /* アップロード進捗表示 */
+    #uploadProgress {
+      margin: 10px;
+      font-weight: bold;
+      color: green;
+    }
+    /* アップロード済みファイル数表示 */
+    #completedUploads {
+      margin: 10px;
+      font-weight: bold;
+      color: purple;
+    }
+    /* アップロード済みファイル表示領域（スクロール可能） */
+    #fileList {
+      border: 1px solid #ccc;
+      padding: 10px;
+      height: 200px;
+      overflow-y: scroll;
+      margin: 20px;
+    }
+    /* 各ファイル表示行 */
+    .file-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin: 5px 0;
+      padding: 0 10px;
+    }
+    /* ファイル名部分 */
+    .filename {
+      text-align: left;
+      flex-grow: 1;
+    }
+    /* ボタン群 */
+    .button-container {
+      display: flex;
+      gap: 5px;
+    }
+    /* ダウンロード、プレビュー、削除ボタン */
+    .download-btn, .preview-btn, .delete-btn, .delete-all-btn {
+      cursor: pointer;
+      background: #eee;
+      border: none;
+      padding: 5px 10px;
+    }
+    /* 容量表示テキスト */
+    #capacityText { margin: 20px; }
+    #capacityValue { font-weight: bold; color: blue; }
+    /* プレビュー領域（画像、動画、PDF、音声、テキスト） */
+    .preview-section {
+      display: none;
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0,0,0,0.8);
+      justify-content: center;
+      align-items: center;
+      z-index: 100;
+    }
+    .preview-content {
+      max-width: 90%;
+      max-height: 90%;
+    }
+    .preview-close {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      font-size: 20px;
+      color: #fff;
+      cursor: pointer;
+    }
+    /* テキストプレビュー用 */
+    #textContent {
+      background: #fff;
+      color: #000;
+      padding: 20px;
+      overflow: auto;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- アップロード進捗表示 -->
+    <div id="uploadProgress">アップロード進捗: 0%</div>
+    <!-- アップロード済みファイル数表示 -->
+    <div id="completedUploads">アップロード済みファイル数: 0</div>
+  
+    <!-- ファイルアップロード領域 -->
+    <div id="uploadArea">ここにファイルをドラッグ＆ドロップ、またはクリックしてファイルを選択</div>
+    <input type="file" id="fileInput" style="display:none;" multiple>
+    
+    <!-- アップロード済みファイルの表示領域 -->
+    <div id="fileList"></div>
+  
+    <!-- 保存容量表示 -->
+    <div id="capacityText">保存容量: <span id="capacityValue">0</span> バイト</div>
+  </div>
+  
+  <!-- プレビュー用領域（画像） -->
+  <div id="imagePreview" class="preview-section">
+    <span class="preview-close" onclick="closePreview('imagePreview')">&times;</span>
+    <img id="imageContent" class="preview-content" src="" alt="Image Preview">
+  </div>
+  
+  <!-- プレビュー用領域（動画） -->
+  <div id="videoPreview" class="preview-section">
+    <span class="preview-close" onclick="closePreview('videoPreview')">&times;</span>
+    <video id="videoContent" class="preview-content" controls>
+      <source src="" type="video/mp4">
+      Your browser does not support the video tag.
+    </video>
+  </div>
+  
+  <!-- プレビュー用領域（PDF） -->
+  <div id="pdfPreview" class="preview-section">
+    <span class="preview-close" onclick="closePreview('pdfPreview')">&times;</span>
+    <embed id="pdfContent" class="preview-content" type="application/pdf" src="">
+  </div>
+  
+  <!-- プレビュー用領域（音声） -->
+  <div id="audioPreview" class="preview-section">
+    <span class="preview-close" onclick="closePreview('audioPreview')">&times;</span>
+    <audio id="audioContent" class="preview-content" controls>
+      <source src="" type="audio/mpeg">
+      Your browser does not support the audio element.
+    </audio>
+  </div>
+  
+  <!-- プレビュー用領域（テキスト） -->
+  <div id="textPreview" class="preview-section">
+    <span class="preview-close" onclick="closePreview('textPreview')">&times;</span>
+    <div id="textContent" class="preview-content"></div>
+  </div>
+  
+  <script>
+    // グローバル変数：アップロード済みファイル数
+    var completedUploads = 0;
+    // アップロードキューと状態
+    var uploadQueue = [];
+    var isUploading = false;
+  
+    document.addEventListener('DOMContentLoaded', function() {
+      // ファイル名取得と容量取得を並列で実行
+      loadAllFileNames();
+      updateCapacity();
+      setInterval(checkUploadProgress, 1000);
+    });
+  
+    // サーバー側のアップロード進捗を取得して表示更新
+    function checkUploadProgress() {
+      google.script.run.withSuccessHandler(function(progress) {
+        var progressVal = parseFloat(progress);
+        document.getElementById('uploadProgress').textContent = "アップロード進捗: " + Math.floor(progressVal * 100) + "%";
+      }).getProgress();
+    }
+  
+    // --- ファイル名取得処理 ---
+    // 最初に全件数を取得し、各インデックス毎に順次取得してリスト更新
+    function loadAllFileNames() {
+      google.script.run.withSuccessHandler(function(count) {
+        const totalCount = Number(count);
+        if (totalCount === 0) {
+          renderFileList([]);
+          return;
+        }
+    
+        const fileMap = {};
+        // 1～totalCountまで一斉にリクエストを送信
+        for (let i = 1; i <= totalCount; i++) {
+          google.script.run.withSuccessHandler(function(fileEntries) {
+            fileEntries.forEach(function(entry) {
+              if (!fileMap[entry.name]) {
+                fileMap[entry.name] = entry.storageId;
+              }
+            });
+        
+            // 取得結果が返るたびにリストを再描画（最新の状態に更新）
+            const allFiles = [];
+            for (let key in fileMap) {
+              allFiles.push({ name: key, storageId: fileMap[key] });
+            }
+            renderFileList(allFiles);
+          }).getfilename(i);
+        }
+      }).getfilename(0);
+    }
+    // ファイル一覧表示（各項目は {name, storageId} オブジェクト）
+    function renderFileList(fileEntries) {
+      var fileListDiv = document.getElementById('fileList');
+      fileListDiv.innerHTML = '';
+      if (!fileEntries || fileEntries.length === 0) {
+        fileListDiv.innerHTML = '<div>ファイルがありません</div>';
+        return;
+      }
+      fileEntries.forEach(function(entry) {
+        var fileDiv = document.createElement('div');
+        fileDiv.className = 'file-item';
+      
+        var nameSpan = document.createElement('span');
+        nameSpan.className = 'filename';
+        nameSpan.textContent = '・' + entry.name;
+        fileDiv.appendChild(nameSpan);
+      
+        var btnContainer = document.createElement('span');
+        btnContainer.className = 'button-container';
+      
+        // ダウンロードボタン
+        var downloadBtn = document.createElement('button');
+        downloadBtn.className = 'download-btn';
+        downloadBtn.textContent = 'ダウンロード';
+        downloadBtn.onclick = function() {
+          downloadFile(entry.name, entry.storageId);
+        };
+        btnContainer.appendChild(downloadBtn);
+      
+        // プレビューボタン
+        var previewBtn = document.createElement('button');
+        previewBtn.className = 'preview-btn';
+        previewBtn.textContent = 'プレビュー';
+        previewBtn.onclick = function() {
+          google.script.run.withSuccessHandler(function(urlData) {
+            if(urlData.type.indexOf("image") > -1) {
+              document.getElementById('imageContent').src = urlData.data;
+              document.getElementById('imagePreview').style.display = 'flex';
+            } else if(urlData.type.indexOf("video") > -1) {
+              document.getElementById('videoContent').src = urlData.data;
+              document.getElementById('videoPreview').style.display = 'flex';
+            } else if(urlData.type === "application/pdf") {
+              document.getElementById('pdfContent').src = urlData.data;
+              document.getElementById('pdfPreview').style.display = 'flex';
+            } else if(urlData.type.indexOf("audio") > -1) {
+              document.getElementById('audioContent').src = urlData.data;
+              document.getElementById('audioPreview').style.display = 'flex';
+            } else if(urlData.type.indexOf("text") > -1) {
+              var base64Part = urlData.data.split(',')[1];
+              var decodedText = atob(base64Part);
+              document.getElementById('textContent').textContent = decodedText;
+              document.getElementById('textPreview').style.display = 'flex';
+            }
+          }).previewFile(entry.name, entry.storageId);
+        };
+        btnContainer.appendChild(previewBtn);
+      
+        // 削除ボタン
+        var deleteBtn = document.createElement('button');
+        deleteBtn.className = 'delete-btn';
+        deleteBtn.textContent = '削除';
+        deleteBtn.onclick = function() {
+          google.script.run.withSuccessHandler(function(resp) {
+            alert(resp);
+            loadAllFileNames();
+            updateCapacity();
+          }).deleteFile(entry.name);
+        };
+        btnContainer.appendChild(deleteBtn);
+      
+        fileDiv.appendChild(btnContainer);
+        fileListDiv.appendChild(fileDiv);
+      });
+    }
+  
+    // ダウンロード処理（previewFile に保存先IDを渡す）
+    function downloadFile(filename, storageId) {
+      google.script.run.withSuccessHandler(function(fileData) {
+        if (fileData && fileData.data && fileData.type) {
+          var a = document.createElement('a');
+          a.href = fileData.data;
+          a.download = filename;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+        } else {
+          alert("File not found.");
+        }
+      }).previewFile(filename, storageId);
+    }
+  
+    /* ----- 以下、ファイルアップロード処理 ----- */
+    function handleFiles(files) {
+      for (var i = 0; i < files.length; i++) {
+        uploadQueue.push(files[i]);
+      }
+      processUploadQueue();
+    }
+  
+    function processUploadQueue() {
+      if (isUploading || uploadQueue.length === 0) return;
+      isUploading = true;
+      var file = uploadQueue.shift();
+      var isLast = (uploadQueue.length === 0);
+      uploadFile(file, function() {
+        isUploading = false;
+        processUploadQueue();
+      }, isLast);
+    }
+  
+    function uploadFile(file, callback, isLast) {
+      var reader = new FileReader();
+      reader.onprogress = function(e) {
+        if (e.lengthComputable) {
+          var percent = e.loaded / e.total;
+          document.getElementById('uploadProgress').textContent = "アップロード進捗 (送信中): " + Math.floor(percent * 100) + "%";
+        }
+      };
+      reader.onload = function(e) {
+        var data = {
+          name: file.name,
+          type: file.type,
+          data: e.target.result.split(',')[1]  // Base64部分のみ
+        };
+        google.script.run.withSuccessHandler(function(resp) {
+          completedUploads++;
+          document.getElementById('completedUploads').textContent = "アップロード済みファイル数: " + completedUploads;
+          if (isLast) { alert(resp); }
+          // アップロード完了後、ファイル名リストと容量の再取得を行う
+          loadAllFileNames();
+          updateCapacity();
+          callback();
+        }).uploadData(data);
+      };
+      reader.readAsDataURL(file);
+    }
+  
+    /* ----- 以下、イベントリスナー ----- */
+    var uploadArea = document.getElementById('uploadArea');
+    var fileInput = document.getElementById('fileInput');
+  
+    uploadArea.addEventListener('click', function() {
+      fileInput.click();
+    });
+  
+    uploadArea.addEventListener('dragover', function(e) {
+      e.preventDefault();
+      uploadArea.style.background = "#ddd";
+    });
+  
+    uploadArea.addEventListener('dragleave', function(e) {
+      e.preventDefault();
+      uploadArea.style.background = "";
+    });
+  
+    uploadArea.addEventListener('drop', function(e) {
+      e.preventDefault();
+      uploadArea.style.background = "";
+      handleFiles(e.dataTransfer.files);
+    });
+  
+    fileInput.addEventListener('change', function() {
+      handleFiles(fileInput.files);
+    });
+  
+    // --- ファイル保存容量取得処理 ---
+    // 最初にパーツ数を取得し、各パーツ毎に順次取得してその都度合算値を画面に更新する
+    function updateCapacity() {
+      google.script.run.withSuccessHandler(function(count) {
+        count = Number(count);
+        if (count <= 0) {
+          document.getElementById('capacityValue').textContent = "0";
+          return;
+        }
+    
+        let total = 0;
+        // 1～countまで一斉にリクエストを送信
+        for (let i = 1; i <= count; i++) {
+          google.script.run.withSuccessHandler(function(capacity) {
+            const capNum = Number(capacity);
+            if (!isNaN(capNum)) {
+              total += capNum;
+              // 各レスポンスごとにUIを更新
+              document.getElementById('capacityValue').textContent = total;
+            }
+          }).getCapacityParts(i);
+        }
+      }).getCapacityParts(0);
+    }
+  
+    // プレビュー領域を閉じる
+    function closePreview(id) {
+      document.getElementById(id).style.display = 'none';
+    }
+  </script>
+</body>
+</html>
