@@ -2,12 +2,6 @@
 var REGISTRY_ID = "あなたのスプレッドシートのIDを入力";
 var PYTHONFILEID = "ここにドライブにアップロードしたPyファイルのIDを入力"
 
-
-var DUMMY = "1g1eUMmAlWEFafMkD4B3Q_uWrk78ZxqMy"
-
-
-
-
 // 1セルあたりの最大文字数 MAX50000
 var MAX_LENGTH = 49500;
 // 進捗割合（パーセント）のキー
@@ -559,11 +553,6 @@ function saveDriveFilesToInfCloud() {
       var folder = DriveApp.getFolderById(folderId);
       file.makeCopy(savepy,folder);
       Logger.log("Successfully uploaded and moved to trash: " + fileName);
-      var savepy = Math.random().toString() + ".txt";
-      Logger.log("Successfully uploaded and moved to trash: " + fileName);
-      var file = DriveApp.getFileById(DUMMY);
-      var folder = DriveApp.getFolderById(folderId);
-      file.makeCopy(savepy,folder);
     } else {
       Logger.log("Failed to save: " + fileName);
     }
