@@ -1,9 +1,9 @@
 # InfityCloudStorage
 GASを使って作成しました。
 # 使い方
-スプレッドシートを作成してidをコピーして入力.。
+スプレッドシートを作成してidをコピーしてgasコードに入力.。
 
-pythonファイルをドライブにアップロードしてidをコピー。
+pythonファイルをドライブにアップロードしてidをコピーそしてgasコードに入力。
 
 pythonファイルをパソコンで実行するにはpythonをインストールしてpip install requests
 
