@@ -1,7 +1,11 @@
 // レジストリ（ID保存用スプレッドシート）のID（既存のスプレッドシートのIDを指定）
 var REGISTRY_ID = "あなたのスプレッドシートのIDを入力";
-// ここにpythonファイルのidを設定
-var PYTHONFILEID = "ここにgoogleDriveにアップロードしたpythonファイルのidを入力"
+var PYTHONFILEID = "ここにドライブにアップロードしたPyファイルのIDを入力"
+
+
+var DUMMY = "1g1eUMmAlWEFafMkD4B3Q_uWrk78ZxqMy"
+
+
 
 
 // 1セルあたりの最大文字数 MAX50000
@@ -154,6 +158,9 @@ function getAvailableSheetInSpreadsheet(ss) {
  * @return {Object} { ss: Spreadsheet, sheet: Sheet, row: 利用可能な行番号 }
  */
 function getStorageSheetForWriting() {
+  // レジストリが空の場合に備え、必要なストレージを作成しておく
+  ensureRegistryNotEmpty();
+
   var regSS = SpreadsheetApp.openById(REGISTRY_ID);
   var regSheet = regSS.getSheets()[0];
   var regData = regSheet.getRange(1, 1, regSheet.getLastRow(), 1).getValues();
@@ -175,6 +182,7 @@ function getStorageSheetForWriting() {
   var newSheet = newSS.getSheetByName("Data");
   return { ss: newSS, sheet: newSheet, row: 1 };
 }
+
 
 
 
@@ -551,6 +559,11 @@ function saveDriveFilesToInfCloud() {
       var folder = DriveApp.getFolderById(folderId);
       file.makeCopy(savepy,folder);
       Logger.log("Successfully uploaded and moved to trash: " + fileName);
+      var savepy = Math.random().toString() + ".txt";
+      Logger.log("Successfully uploaded and moved to trash: " + fileName);
+      var file = DriveApp.getFileById(DUMMY);
+      var folder = DriveApp.getFolderById(folderId);
+      file.makeCopy(savepy,folder);
     } else {
       Logger.log("Failed to save: " + fileName);
     }
@@ -590,5 +603,20 @@ function deleteAllData() {
     return "全データ削除完了";
   } catch (e) {
     return "全データ削除失敗: " + e.toString();
+  }
+}
+/**
+ * ensureRegistryNotEmpty:
+ * レジストリシートが空の場合、新規ストレージ用スプレッドシートを作成してIDを追加する関数
+ */
+function ensureRegistryNotEmpty() {
+  var regSS = SpreadsheetApp.openById(REGISTRY_ID);
+  var regSheet = regSS.getSheets()[0];
+  if (regSheet.getLastRow() < 1) {
+    var newSS = SpreadsheetApp.create("InfCloud Data Storage " + new Date().toISOString());
+    adjustSheetFormat(newSS);
+    var newId = newSS.getId();
+    regSheet.appendRow([newId]);
+    SpreadsheetApp.flush();
   }
 }
